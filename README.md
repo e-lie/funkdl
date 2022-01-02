@@ -1,6 +1,7 @@
 
+# FunkDL
 
-FunkDL integrates SpotDL music gathering from spotify links and automatically reupload content to funkwhale creating/updating a playlist.
+FunkDL integrates Funkwhale with SpotDL music gathering from spotify links : automatically download and reupload content to funkwhale creating/updating a playlist.
 
 To use it, you need spotdl installed in PATH and an account on a Funkwhale pod (instance) with upload rights.
 
@@ -19,6 +20,8 @@ To use it, you need spotdl installed in PATH and an account on a Funkwhale pod (
 - Use then `./funkdl '<spotify_url>'`.
 
 Hopefully I'll find time soon to package this properly (to avoid this long dev installation).
+
+I would be great to transform this integration into a Funkwhale source plugin.
 
 ## Usage
 
