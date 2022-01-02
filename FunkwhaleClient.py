@@ -20,10 +20,16 @@ class FunkwhaleClient:
         except:
             raise Exception("Cannot connect to Funkwhale server with url: {} and token: {}".format(self._url, self._token))
 
+    def except_msg(self, response, http_code):
+        try:
+            assert response.status_code == http_code
+        except:
+            raise Exception("Funkwhale api error : " + response.text)
+
     def list_playlists(self):
         url = self._url + '/playlists/'
         response = requests.get(url, headers=self._headers)
-        assert response.status_code == 200
+        self.except_msg(response, 200)
         return response.json()['results']
 
     def _create_callback(self, encoder):
@@ -35,9 +41,10 @@ class FunkwhaleClient:
 
     def create_playlist(self, name, privacy_level):
         url = self._url + '/playlists/'
+        name = name if len(name) < 50 else name[0:50] # cut playlist name at 50 chars
         data = { 'name' : name, 'privacy_level': privacy_level }
         response = requests.post(url, headers=self._headers, json=data)
-        assert response.status_code == 201
+        self.except_msg(response, 201)
         playlist_id = response.json()["id"]
         return playlist_id
 
@@ -55,7 +62,7 @@ class FunkwhaleClient:
     def delete_playlist(self, playlist_id):
         url = self._url + '/playlists/' + str(playlist_id)
         response = requests.delete(url, headers=self._headers)
-        assert response.status_code == 204
+        self.except_msg(response, 204)
         return playlist_id
 
     def create_upload(self, filename, library_id):
@@ -72,14 +79,14 @@ class FunkwhaleClient:
             headers = self._headers | {'Content-Type': monitor.content_type}
             print(filename + '   ')
             response = requests.post(url, headers=headers, data=monitor)
-        assert response.status_code == 201
+        self.except_msg(response, 201)
         upload_uuid = response.json()["uuid"]
         return upload_uuid
 
     def get_track_id_from_upload(self, upload_uuid):
         url = self._url + '/uploads/' + str(upload_uuid)
         response = requests.get(url, headers=self._headers)
-        assert response.status_code == 200
+        self.except_msg(response, 200)
         return response.json()["track"]["id"]
 
     def get_track_id_from_metadata(self, file_path):
@@ -88,14 +95,14 @@ class FunkwhaleClient:
         url = self._url + '/uploads/'
         params = { 'q': search_string }
         response = requests.get(url, headers=self._headers, params=params)
-        assert response.status_code == 200
+        self.except_msg(response, 200)
         return response.json()['results'][0]["track"]["id"]
 
     def activate_upload(self, upload_uuid):
         url = self._url + '/uploads/' + str(upload_uuid)
         data = { 'import_status': 'pending'}
         response = requests.patch(url, headers=self._headers, data=data)
-        assert response.status_code == 200
+        self.except_msg(response, 200)
         print('prout')
         pprint(response.json())
         return response.json()
