@@ -1,0 +1,106 @@
+#!/usr/bin/env python
+
+"""FunkDL. Funkwhale SpotDL integration to ease music gathering.
+
+Usage:
+  funkdl <spotify_url>  [--no-delete] [--no-playlist] [--no-upload] [--funkwhale-url=<funkwhale_url>] [--funkwhale-token=<funkwhale_token>] [--library-id=<library_id>] [--playlist-name=<playlist_name>]
+
+Options:
+  -h --help                             Show this screen.
+  --funkwhale-url=<funkwhale_url>       Specify funkwhale instance url to upload to [default: FUNKWHALE_URL].
+  --funkwhale-token=<funkwhale_token>   Authentication token (you need to create an app see funkwhale doc) [default: FUNKWHALE_TOKEN].
+  --library-id=<library_id>             The funkwhale library to upload music into. [default: FUNKWHALE_LIBRARY_ID].
+  --playlist-name=<playlist_name>       Override playlist name from spotify by your own.
+  --no-playlist                         Don't create playlist for the uploaded content. 
+  --no-delete                           Avoid final deletion of downloaded audio files.
+  --no-upload                           Only add locally listed (m3u) files to playlist avoiding download and upload of files.
+
+"""
+from docopt import docopt
+import os
+import sys
+import shutil
+from pathlib import Path
+from FunkwhaleClient import FunkwhaleClient
+
+
+if __name__ == '__main__':
+    arguments = docopt(__doc__)
+    cwd = os.getcwd()
+    funkdl_dir_path = os.path.join(cwd, 'funkdl-tmp')
+
+    if arguments['--funkwhale-url'] == 'FUNKWHALE_URL':
+        funkwhale_url = os.environ['FUNKWHALE_URL']
+    else:
+        funkwhale_url = arguments['--funkwhale-url']
+
+    if arguments['--funkwhale-token'] == 'FUNKWHALE_TOKEN':
+        funkwhale_token = os.environ['FUNKWHALE_TOKEN']
+    else:
+        funkwhale_token = arguments['--funkwhale-token']
+
+    if arguments['--library-id'] == 'FUNKWHALE_LIBRARY_ID':
+        library_id = os.environ['FUNKWHALE_LIBRARY_ID']
+    else:
+        library_id = arguments['--library-id']
+
+    if not os.path.exists(funkdl_dir_path):
+        os.makedirs(funkdl_dir_path)
+        os.chdir(funkdl_dir_path)
+        if not arguments['--no-upload']:
+            os.system("spotdl --m3u {}".format(arguments["<spotify_url>"]))
+    else:
+        os.chdir(funkdl_dir_path)
+
+    playlist_path = list(Path(funkdl_dir_path).rglob('*.m3u'))[0]
+    plname = arguments['--playlist-name']
+    playlist_name = os.path.splitext(playlist_path.name)[0] if plname is None else plname
+
+    with open(playlist_path, 'r') as playlist_file:
+        lines = playlist_file.readlines()
+        track_files = [line.replace('\n','') for line in lines]
+
+    fc = FunkwhaleClient(funkwhale_url, funkwhale_token)
+    track_uploads = {}
+    track_ids = {}
+
+    if not arguments['--no-upload']:
+        for i, track_file in enumerate(track_files):
+            print(("Uploading... ({}/{})".format(i+1, len(track_files))), end='  ')
+            upload_id = fc.create_upload(track_file, library_id)
+            track_uploads[track_file] = upload_id
+
+    # Add new tracks to funkwhale playlist
+    if not arguments["--no-playlist"]:
+        i = 0
+        for track_name, upload_id in track_uploads.items():
+            i += 1
+            print("Gathering Funkwhale upload/track ids... ({}/{})".format(i, len(track_files)), end='\r', flush=True)
+            try:
+                # when an uploaded track already exist, the upload object has in status skipped and is not requestable by uuid (bug ?)
+                track_id = fc.get_track_id_from_upload(upload_id)
+            except:
+                # so we try to find the upload and track_id by track title and artist metadata
+                track_id = fc.get_track_id_from_metadata(track_name)
+            track_ids[track_id] = track_name
+
+        # If playlist with same name already exists add tracks to it else create the playlist
+        existing_playlists_dict = { playlist['name']: playlist["id"] for playlist in fc.list_playlists()}
+        if not playlist_name in existing_playlists_dict.keys():
+            playlist_id = fc.create_playlist(playlist_name, 'instance')
+        else:
+            playlist_id = existing_playlists_dict[playlist_name]
+
+        print("")
+        for i, track_id in enumerate(track_ids):
+            print("Adding tracks to playlist... ({}/{})".format(i+1, len(track_files)), end='\r', flush=True)
+            fc.add_to_playlist(track_id, playlist_id)
+        print("")
+
+        # TODO Improvement : the playlist to add tracks into is not necessarily owned by the funkdl/library user
+        # This can be confusing if two people try to add the same spotify playlist (only the first will be added)
+        # the --playlist-name argument is meant for this usecase but maybe add something like following to overwrite only playlist from the current user
+        # playlist_names = [playlist['name'] for playlist in fc.list_playlists if playlist['user']['username'] == "elie"]
+
+    if not arguments["--no-delete"]:
+        shutil.rmtree(funkdl_dir_path)

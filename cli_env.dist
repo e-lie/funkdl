@@ -1,0 +1,4 @@
+
+export FUNKWHALE_URL=''
+export FUNKWHALE_TOKEN=""
+export FUNKWHALE_LIBRARY_ID=""

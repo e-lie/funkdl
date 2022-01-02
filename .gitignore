@@ -1,0 +1,7 @@
+__pycache__
+*.pyc
+
+venv
+
+cli_env
+funkdl-tmp
